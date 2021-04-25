@@ -1,0 +1,111 @@
+#include<fcntl.h>
+#include<signal.h>
+#include<stdio.h>
+#include<stdlib.h>
+#include<string.h>
+#include<sys/fcntl.h>
+#include<sys/ipc.h>
+#include<sys/stat.h>
+#include<sys/time.h>
+#include<sys/types.h>
+#include<sys/wait.h>
+#include<unistd.h>
+#include"asm-arm/arch-pxa/lib/creator_pxa270_lcd.h"
+
+
+int SIGALRM_count = 0;
+int enable = 0;
+
+void SIGALRM_handler(int signum)
+{
+	printf("test3\n");
+	if (enable)
+		SIGALRM_count++;
+	else
+		printf(" time = %d\n",SIGALRM_count);
+}
+
+
+int main(int argc,char **argv)
+{
+
+	struct sigaction SA_SIGALRM;
+	struct itimerval timer;
+	unsigned short key;
+	int fd,ret;
+	
+	if((fd = open("/dev/lcd",O_RDWR))<0)
+		return (-1);
+	ioctl(fd,KEY_IOCTL_CLEAR,key);
+	
+	memset(&SA_SIGALRM,0,sizeof(SA_SIGALRM));
+	SA_SIGALRM.sa_handler = &SIGALRM_handler;
+	sigaction(SIGALRM,&SA_SIGALRM,NULL);
+
+	timer.it_value.tv_sec = 0;
+	timer.it_value.tv_usec = 10000;
+
+	timer.it_interval.tv_sec = 0;
+	timer.it_interval.tv_usec = 10000;
+	
+
+	
+	printf("Enter * , # or 0 to control timer\n");
+	int x1,x2,y;
+	
+	_7seg_info_t data;
+	if((fd = open("/dev/lcd",O_RDWR))<0)
+	{
+		printf("Open /dev/lcd faild \n");
+	}
+
+	setitimer(ITIMER_REAL,&timer,NULL);
+	data.Mode =_7SEG_MODE_PATTERN;
+	data.Which=_7SEG_D7_INDEX;
+	data.Value=0x80;
+	ioctl(fd,_7SEG_IOCTL_SET,&data);
+
+	while(1)
+	{
+		sleep(1);
+		x1 = SIGALRM_count/10;
+		x2 = SIGALRM_count%10;
+
+		
+		y=(x1%10)*16;
+		x1=x1/10;
+		y=y+(x1%10)*16*16;
+		y=y+x2;
+
+		data.Mode =_7SEG_MODE_HEX_VALUE;
+		data.Which=_7SEG_D5_INDEX|_7SEG_D6_INDEX|_7SEG_D8_INDEX;
+		data.Value=y;
+		ioctl(fd,_7SEG_IOCTL_SET,&data);
+
+		ret = ioctl(fd,KEY_IOCTL_CHECK_EMPTY,&key);
+		if (ret<0)
+		{
+			printf("test1\n");
+			sleep(1);
+			continue;
+		}
+		ret = ioctl(fd,KEY_IOCTL_GET_CHAR,&key);
+		if((key & 0xff) == '*')
+		{
+			printf("test2\n");
+			enable = 1;
+		}
+		if((key & 0xff) == '#')
+			enable = 0;
+
+		if((key & 0xff) == '0')
+			if (enable == 0)
+				SIGALRM_count = 0;
+
+		
+	}
+	return 0;
+}
+					
+					
+				
